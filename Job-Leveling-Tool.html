@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Job Architecture &amp; Leveling — Mercer P/M Framework</title>
+<title>Job Architecture &amp; Leveling — Mercer P/M + BLS Support Framework</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.16/mammoth.browser.min.js"></script>
 <style>
@@ -25,6 +25,7 @@
     --e-color: #6d28d9;
     --s-color: #64748b;
     --t-color: #b45309;
+    --st-color: #0d9488;
     --success: #059669;
     --warn: #d97706;
     --danger: #dc2626;
@@ -142,6 +143,35 @@
     display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   }
   .search-bar .filter-chip.active { background: var(--primary-soft); color: var(--primary); border-color: var(--primary-2); }
+
+  /* Sidebar dropdown (e.g. Job Families) */
+  .sidebar-select {
+    width: calc(100% - 12px);
+    margin: 0 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 13px;
+    background: white;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .sidebar-select:hover { border-color: var(--primary-2); }
+  .sidebar-select:focus { outline: none; border-color: var(--primary-2); box-shadow: 0 0 0 3px rgba(30,91,214,0.12); }
+
+  /* Hide sidebar on non-catalog views */
+  .layout.no-sidebar { grid-template-columns: 1fr; }
+  .layout.no-sidebar .sidebar { display: none; }
+
+  /* Sidebar-embedded catalog filters: stack vertically, remove panel chrome */
+  .sidebar-filters { background: transparent; border: none; box-shadow: none; padding: 0; margin: 0; }
+  .sidebar-filters .cf-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .sidebar-filters .cf-field { min-width: 0; width: 100%; }
+  .sidebar-filters .stream-toggle { flex-wrap: wrap; }
+  .sidebar-filters .stream-toggle .stream-btn { padding: 6px 10px; flex: 1; }
+  .sidebar-filters .cf-search { padding: 2px 10px; margin-bottom: 12px; }
+  .sidebar-filters .cf-search input { padding: 8px 0; font-size: 13px; }
+  .sidebar-filters .cf-footer { flex-direction: column; align-items: flex-start; gap: 8px; }
 
   /* ===== Catalog filter panel (simplified) ===== */
   .catalog-filters {
@@ -307,6 +337,7 @@
   .pill.e { background: #efe6fd; color: #5b21b6; }
   .pill.s { background: #eef0f3; color: #475569; }
   .pill.t { background: #fdf0d8; color: #92400e; }
+  .pill.st { background: #ccfbf1; color: #0f766e; }
   .pill.muted { background: var(--panel-2); color: var(--muted); }
   .pill.success { background: #d1fae5; color: var(--success); }
   .pill.warn { background: #fef3c7; color: var(--warn); }
@@ -625,6 +656,7 @@
   }
   .level-badge.m { background: var(--accent); }
   .level-badge.e { background: var(--e-color); }
+  .level-badge.st { background: var(--st-color); }
 
   .keyword-tag { background: white; border: 1px solid #c6d8f0; padding: 2px 9px; border-radius: 999px; font-size: 11px; color: var(--primary); font-weight: 500; margin-right: 4px; }
 
@@ -759,7 +791,7 @@
     <div class="logo">JL</div>
     <div>
       <div class="title">Job Architecture &amp; Leveling</div>
-      <div class="subtitle">Benchmark Catalog + Company Positions • Mercer P/M Framework</div>
+      <div class="subtitle">Benchmark Catalog + Company Positions • Mercer P/M + BLS Support Framework</div>
     </div>
   </div>
   <div class="nav">
@@ -777,34 +809,60 @@
     <button class="btn btn-ghost" id="importBackupBtn" title="Restore from a JSON backup (overwrites current saved data)">⬆ Restore</button>
     <input type="file" id="importBackupInput" accept="application/json,.json" style="display:none" />
     <span class="pill">v1.0</span>
-    <span>Mercer P1–P6 • M1–M6 • E1–E2</span>
+    <span>Mercer P1–P6 • M1–M6 • E1–E2 • BLS ST1–ST9</span>
   </div>
 </div>
 
-<div class="layout">
-  <!-- Sidebar -->
-  <aside class="sidebar">
+<div class="layout" id="appLayout">
+  <!-- Sidebar (Job Catalog filters) -->
+  <aside class="sidebar" id="catalogSidebar">
     <h4>Career Streams</h4>
     <div id="streamList"></div>
 
-    <h4 style="margin-top:24px;">Job Families</h4>
-    <div id="familyList"></div>
+    <h4 style="margin-top:24px;">Filter Catalog</h4>
+    <div class="catalog-filters sidebar-filters">
+      <div class="cf-search">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="catalogSearch" placeholder="Search jobs..." />
+        <button class="clear-x" id="catalogSearchClear" title="Clear search" style="display:none;">×</button>
+      </div>
 
-    <h4 style="margin-top:24px;">Quick Filters</h4>
-    <div class="stream" id="filter-ic">
-      <span class="dot" style="background:var(--p-color)"></span>
-      Individual contributor
-      <span class="count" id="cnt-ic">0</span>
-    </div>
-    <div class="stream" id="filter-mgr">
-      <span class="dot" style="background:var(--m-color)"></span>
-      People manager
-      <span class="count" id="cnt-mgr">0</span>
-    </div>
-    <div class="stream" id="filter-sr">
-      <span class="dot" style="background:var(--e-color)"></span>
-      Senior leadership
-      <span class="count" id="cnt-sr">0</span>
+      <div class="cf-row">
+        <div class="cf-field">
+          <label for="catalogDeptFilter">Job Families</label>
+          <select id="catalogDeptFilter">
+            <option value="">All families</option>
+          </select>
+        </div>
+        <div class="cf-field">
+          <label for="catalogSubFamilyFilter">Sub-Family</label>
+          <select id="catalogSubFamilyFilter">
+            <option value="">All sub-families</option>
+          </select>
+        </div>
+        <div class="cf-field">
+          <label for="catalogLevelFilter">Level</label>
+          <select id="catalogLevelFilter">
+            <option value="">All levels</option>
+          </select>
+        </div>
+        <div class="cf-field">
+          <label>Stream</label>
+          <div class="stream-toggle" id="catalogStreamToggle">
+            <button class="stream-btn active" data-stream="">All</button>
+            <button class="stream-btn" data-stream="P">Prof</button>
+            <button class="stream-btn" data-stream="M">Mgmt</button>
+            <button class="stream-btn" data-stream="E">Exec</button>
+            <button class="stream-btn" data-stream="ST">Support</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cf-footer">
+        <div class="cf-result-count" id="catalogResultCount">Showing <strong>0</strong> jobs</div>
+        <div class="cf-active-chips" id="catalogActiveChips"></div>
+        <button class="btn btn-ghost btn-sm" id="resetFiltersBtn" style="display:none;">Clear all filters</button>
+      </div>
     </div>
   </aside>
 
@@ -819,50 +877,6 @@
             <span>All Streams</span><span>All Departments</span>
           </div>
           <h2 id="catalogTitle">Job Catalog</h2>
-        </div>
-      </div>
-
-      <div class="catalog-filters">
-        <div class="cf-search">
-          <span class="search-icon">⌕</span>
-          <input type="text" id="catalogSearch" placeholder="Search jobs by title or code..." />
-          <button class="clear-x" id="catalogSearchClear" title="Clear search" style="display:none;">×</button>
-        </div>
-
-        <div class="cf-row">
-          <div class="cf-field">
-            <label for="catalogDeptFilter">Department</label>
-            <select id="catalogDeptFilter">
-              <option value="">All departments</option>
-            </select>
-          </div>
-          <div class="cf-field">
-            <label for="catalogSubFamilyFilter">Sub-Family</label>
-            <select id="catalogSubFamilyFilter">
-              <option value="">All sub-families</option>
-            </select>
-          </div>
-          <div class="cf-field">
-            <label for="catalogLevelFilter">Level</label>
-            <select id="catalogLevelFilter">
-              <option value="">All levels</option>
-            </select>
-          </div>
-          <div class="cf-field" style="flex:0 0 auto;">
-            <label>Stream</label>
-            <div class="stream-toggle" id="catalogStreamToggle">
-              <button class="stream-btn active" data-stream="">All</button>
-              <button class="stream-btn" data-stream="P">Professional</button>
-              <button class="stream-btn" data-stream="M">Management</button>
-              <button class="stream-btn" data-stream="E">Executive</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="cf-footer">
-          <div class="cf-result-count" id="catalogResultCount">Showing <strong>0</strong> jobs</div>
-          <div class="cf-active-chips" id="catalogActiveChips"></div>
-          <button class="btn btn-ghost btn-sm" id="resetFiltersBtn" style="display:none;">Clear all filters</button>
         </div>
       </div>
 
@@ -1617,13 +1631,21 @@
             <!-- Import-complete panel: shown after a successful bulk import -->
             <div id="importCompletePanel" style="display:none;">
               <hr class="divider" />
-              <div style="background:var(--primary-soft); border:1px solid #c6d8f0; border-radius:var(--radius); padding:14px 18px; margin-bottom:14px;">
+              <div id="importCompleteBanner" style="background:var(--primary-soft); border:1px solid #c6d8f0; border-radius:var(--radius); padding:14px 18px; margin-bottom:14px;">
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                  <span style="font-size:20px;">&#10003;</span>
+                  <span style="font-size:20px;" id="importCompleteIcon">&#10003;</span>
                   <strong style="font-size:14px;" id="importCompleteMsg">Import complete</strong>
                 </div>
                 <p style="margin:0; font-size:12px; color:var(--muted);" id="importCompleteSummary"></p>
               </div>
+
+              <details id="importErrorsDetails" style="display:none; margin-bottom:14px; border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
+                <summary style="cursor:pointer; font-size:13px; font-weight:600;" id="importErrorsSummary">Show issues</summary>
+                <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                  <button class="btn btn-ghost" id="copyImportErrorsBtn" type="button" style="font-size:11px; padding:4px 8px;">Copy errors</button>
+                </div>
+                <div id="importErrorsList" style="margin-top:8px; max-height:300px; overflow:auto; font-size:12px;"></div>
+              </details>
 
               <h4 style="margin:0 0 8px; font-size:13px;">Start Another Upload</h4>
               <p style="margin:0 0 12px; font-size:12px; color:var(--muted);">Upload another file with a different source company, or continue adding from the same source.</p>
@@ -1690,13 +1712,14 @@
       </div>
 
       <div class="info-strip">
-        The Mercer framework evaluates positions on five dimensions: Impact, Communication, Innovation, Knowledge, and Risk / Accountability. Click any level for full criteria.
+        The Mercer framework evaluates positions on five dimensions: Impact, Communication, Innovation, Knowledge, and Risk / Accountability. The BLS Support (ST) stream classifies clerical and administrative support jobs using four NCS factors: Knowledge, Job Controls &amp; Complexity, Contacts, and Physical Environment. Click any level for full criteria.
       </div>
 
-      <div class="subtabs">
-        <div class="subtab active" data-band="P">Professional (P1–P6)</div>
-        <div class="subtab" data-band="M">Management (M1–M6)</div>
-        <div class="subtab" data-band="E">Executive (E1–E2)</div>
+      <div class="subtabs" id="frameworkSubtabs" style="align-items:center;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px;">
+        <button class="btn btn-secondary btn-sm" id="addFrameworkItemBtn">+ Add Item</button>
+        <button class="btn btn-primary btn-sm" id="addFrameworkBandBtn">+ Add Level Band</button>
       </div>
 
       <div class="job-cards" id="frameworkGrid"></div>
@@ -1723,7 +1746,18 @@
 /* ============================================================
    MERCER FRAMEWORK
    ============================================================ */
-const FRAMEWORK = {
+/* Base bands shipped with the tool. Custom bands and custom items are
+   loaded from IndexedDB and merged into the in-memory FRAMEWORK at boot.
+   Use getFrameworkBands() / getFrameworkItems() / allLevels() instead of
+   reaching into FRAMEWORK directly so custom data is always visible. */
+const BASE_FRAMEWORK_BANDS = [
+  { key: "ST", name: "Support (BLS)", color: "var(--st-color)", builtin: true },
+  { key: "P",  name: "Professional",  color: "var(--p-color)",  builtin: true },
+  { key: "M",  name: "Management",    color: "var(--m-color)",  builtin: true },
+  { key: "E",  name: "Executive",     color: "var(--e-color)",  builtin: true }
+];
+
+let FRAMEWORK = {
   P: [
     { code: "P1", title: "Entry Professional", summary: "Applies basic knowledge under close supervision.", experience: "0–1 yrs", stage: 1,
       impact: "Personal contribution; impact limited to own tasks.",
@@ -1827,8 +1861,254 @@ const FRAMEWORK = {
       knowledge: "Enterprise-wide and industry-wide.",
       risk: "Ultimate accountability for enterprise outcomes.",
       keywords: ["ceo","chief executive","president","chairman"] }
+  ],
+  ST: [
+    { code: "ST1", title: "Entry Clerical / Support", summary: "Performs simple, repetitive tasks under close supervision with minimal prior training.", experience: "0–6 mos", stage: 1,
+      pointRange: "100–249 total points",
+      knowledge: "Knowledge of simple, routine clerical or support tasks requiring little or no prior training. Performs basic tasks such as filing pre-sorted documents, simple copying, delivering messages, or operating basic office equipment following step-by-step instructions.",
+      jobControls: "Works under close and constant supervision. Tasks are clearly defined, simple, and repetitive with virtually no choice in how to perform them. Little or no impact outside the immediate work area.",
+      contacts: "Contacts are primarily with co-workers in the immediate organizational unit or with the public in highly structured settings. Exchanges straightforward factual information that requires little explanation.",
+      physicalEnvironment: "Work is primarily sedentary in a typical office environment with minimal physical demands. May involve walking, standing, or carrying light items occasionally.",
+      impact: "Personal contribution; impact limited to own tasks.",
+      communication: "Exchanges routine factual information with co-workers and the public.",
+      innovation: "Follows step-by-step instructions; no expectation to innovate.",
+      risk: "Errors are readily detected and corrected with little consequence.",
+      keywords: ["file clerk","mail clerk","copy clerk","office aide","messenger","office helper","general office helper"] },
+    { code: "ST2", title: "Developing Clerical / Support", summary: "Carries out a small range of clerical procedures requiring some training and familiarity with the organization.", experience: "6 mos – 1 yr", stage: 1,
+      pointRange: "250–349 total points",
+      knowledge: "Knowledge of a limited range of office rules, procedures, and operations. Carries out recurring assignments (e.g., basic data entry, sorting mail by department, answering routine telephone inquiries, posting to simple accounts) while gaining familiarity with the establishment's policies.",
+      jobControls: "Works under close supervision with specific instructions for new or difficult tasks. Performs a small variety of routine tasks with some choice in deciding what needs to be done but limited latitude in how to do it. Errors are readily detected and corrected.",
+      contacts: "Contacts are with co-workers and the public to exchange routine factual information or to direct persons to appropriate offices. Requires courtesy and tact in standard service situations.",
+      physicalEnvironment: "Primarily office-based with low physical demand. May include extended periods of sitting, using keyboards, or standing at service counters.",
+      impact: "Work supports the immediate unit; limited downstream impact.",
+      communication: "Routine factual exchanges with co-workers and the public.",
+      innovation: "Limited; chooses among a few defined approaches.",
+      risk: "Errors readily detected; limited consequence.",
+      keywords: ["receptionist","data entry","typist","switchboard","office assistant","general clerk","mail room clerk","office clerk"] },
+    { code: "ST3", title: "Qualified Clerical / Support", summary: "Performs a full range of standard clerical or administrative procedures with limited supervision.", experience: "1–2 yrs", stage: 2,
+      pointRange: "350–549 total points",
+      knowledge: "Knowledge of an extensive body of clerical rules, procedures, or operations to perform a wide variety of interrelated or non-standard clerical assignments and resolve recurring problems (e.g., maintaining complex filing systems, reconciling basic accounts, processing standard insurance or personnel forms, operating a multi-line phone and routing calls).",
+      jobControls: "Works under general supervision with established procedures guiding most tasks. Independently handles a full range of routine assignments, selecting from several alternatives in well-defined situations. Errors may require significant effort to identify and correct.",
+      contacts: "Regular contacts with individuals outside the immediate organization such as customers, patients, vendors, or other external parties. Exchanges moderately complex information, provides explanations, and resolves routine complaints or inquiries.",
+      physicalEnvironment: "Standard office environment. May involve moderate physical activity such as standing for extended periods (e.g., teller windows, cashier stations), reaching, bending, or carrying files and supplies.",
+      impact: "Supports a department or service line; errors require effort to detect/correct.",
+      communication: "Regular external contacts; provides explanations and resolves routine issues.",
+      innovation: "Chooses among established alternatives in well-defined situations.",
+      risk: "Errors may require effort to identify and correct.",
+      keywords: ["secretary","bank teller","cashier","accounting clerk","payroll clerk","billing clerk","medical records clerk","personnel clerk","insurance clerk","bookkeeper","administrative assistant","word processor","legal secretary","medical secretary"] },
+    { code: "ST4", title: "Senior Clerical / Support", summary: "Handles complex, non-routine clerical or administrative work requiring substantial procedural knowledge.", experience: "2–4 yrs", stage: 2,
+      pointRange: "550–749 total points",
+      knowledge: "Knowledge of extensive and complex clerical or administrative procedures, regulations, and precedents, along with practical knowledge of the operations and functions of the organization. Applies this knowledge to accomplish assignments that involve varied and complex duties (e.g., examining and verifying documents for completeness and compliance, compiling and reconciling financial reports, coordinating schedules across multiple departments).",
+      jobControls: "Works under general supervision with some latitude in deciding approaches to tasks. Independently resolves most problems and deviates from established procedures when precedents do not clearly apply. Work may affect activities beyond the immediate organizational unit.",
+      contacts: "Contacts with a range of internal and external parties to obtain, clarify, or provide facts and information. May include resolving operating problems, explaining regulations, or justifying procedures. Requires tact, discretion, and persuasion.",
+      physicalEnvironment: "Generally office-based. Physical demands may include frequent movement between work areas, moderate lifting (up to 25 lbs), or operating specialized office equipment.",
+      impact: "May affect activities beyond the immediate unit.",
+      communication: "Internal/external contacts; explains regulations and justifies procedures.",
+      innovation: "Deviates from procedure when precedents do not clearly apply.",
+      risk: "Independent decisions on most problems; meaningful operational impact.",
+      keywords: ["executive secretary","executive assistant","senior clerk","lead clerk","court clerk","loan clerk","senior administrative assistant","office coordinator","senior secretary","administrative coordinator","procurement clerk","purchasing clerk"] },
+    { code: "ST5", title: "Specialist Clerical / Support", summary: "Performs advanced administrative or technical-clerical duties; may serve as lead worker or subject-matter resource.", experience: "4–6 yrs", stage: 3,
+      pointRange: "750–949 total points",
+      knowledge: "Knowledge of the detailed processes, methods, and procedures of a specialized clerical or administrative area (e.g., advanced payroll processing, complex medical coding, legal document preparation, financial compliance checking). May include knowledge of specialized software systems, regulatory frameworks, or technical terminology.",
+      jobControls: "Works independently under only general administrative direction. Plans and carries out assignments, resolving most problems without supervisory guidance. May set priorities for the unit's clerical operations and advise less experienced staff. Decisions affect workflow and accuracy across a section or department.",
+      contacts: "Contacts with persons within and outside the organization, including managers, professionals, and external agencies. Exchanges technical or specialized information, negotiates deadlines, coordinates multi-party activities, and resolves complex procedural issues.",
+      physicalEnvironment: "Primarily sedentary office work. May include moderate physical activity depending on the work setting (e.g., warehouse inventory control, medical supply management).",
+      impact: "Decisions affect workflow and accuracy across a section/department.",
+      communication: "Negotiates deadlines and coordinates multi-party activities.",
+      innovation: "Plans and carries out assignments largely without supervisory guidance.",
+      risk: "Resolves most problems independently; advises others.",
+      keywords: ["senior executive assistant","office manager","administrative specialist","senior bookkeeper","legal assistant","paralegal","medical coder","senior medical secretary","records manager","administrative officer","office supervisor"] },
+    { code: "ST6", title: "Advanced Specialist / Lead Support", summary: "Expert-level administrative support or lead/supervisory role over a clerical unit. Handles the most complex administrative assignments.", experience: "6–10 yrs", stage: 3,
+      pointRange: "950–1249 total points",
+      knowledge: "Knowledge of a wide range of administrative concepts, principles, and practices, together with a comprehensive understanding of the organization's operations, policies, and regulatory environment. Applies this knowledge to develop new procedures, modify existing systems, and resolve unprecedented problems across multiple functional areas.",
+      jobControls: "Works under administrative direction with wide latitude for independent judgment. Plans, organizes, and oversees administrative operations. Establishes procedures for the section or office and resolves complex, non-routine problems. Decisions may significantly affect departmental operations and resources.",
+      contacts: "Contacts with senior management, external agencies, legal counsel, and other high-level parties. Exchanges complex information, justifies and defends administrative decisions, negotiates resolutions to significant issues, and represents the administrative function in cross-functional meetings.",
+      physicalEnvironment: "Standard professional office environment. Minimal physical demands beyond typical office activities.",
+      impact: "Significantly affects departmental operations and resources.",
+      communication: "Senior-level negotiation; represents the function in cross-functional meetings.",
+      innovation: "Develops new procedures; resolves unprecedented problems.",
+      risk: "Decisions shape the section/office; broad latitude.",
+      keywords: ["chief of staff","administrative manager","office administrator","senior paralegal","senior office manager","executive office manager","administrative services manager","chief clerk"] },
+    { code: "ST7", title: "Administrative Program Specialist", summary: "Designs, implements, or manages administrative systems and programs at the department or division level.", experience: "8–12 yrs", stage: 4,
+      pointRange: "1250–1549 total points",
+      knowledge: "Expert knowledge of a specialized administrative area (e.g., records management systems, complex regulatory compliance programs, enterprise-wide administrative process design) combined with broad organizational understanding. Develops innovative administrative approaches and advises senior leadership on administrative policy.",
+      jobControls: "Works with only policy-level direction. Defines objectives, develops methods, and directs projects that affect multiple organizational units. Work typically involves developing new or modified administrative systems, policies, or procedures that have organization-wide implications.",
+      contacts: "Regular contact with senior executives, board members, legal professionals, and external regulatory bodies. Interactions involve presenting analyses, defending recommendations, negotiating agreements, and resolving high-stakes administrative issues.",
+      physicalEnvironment: "Professional office environment. Primarily sedentary with occasional travel for meetings or site visits.",
+      impact: "Affects multiple organizational units; organization-wide implications.",
+      communication: "Presents to executives/board; negotiates agreements.",
+      innovation: "Designs new or modified administrative systems and policies.",
+      risk: "Policy-level direction; broad accountability.",
+      keywords: ["director of administration","senior administrative services manager","chief administrative officer"] },
+    { code: "ST8", title: "Senior Administrative Program Manager", summary: "Directs complex, multi-function administrative programs across an entire organization or enterprise.", experience: "12+ yrs", stage: 5,
+      pointRange: "1550–1849 total points",
+      knowledge: "Mastery of administrative theories, principles, and methods across multiple specialized areas. Recognized as an authoritative resource on administrative systems and organizational operations. Solves unprecedented, complex systemic problems and shapes administrative strategy for the enterprise.",
+      jobControls: "Works under broad administrative and policy guidance only. Establishes organizational administrative objectives and standards. Resolves critical administrative problems that affect the entire enterprise. Decisions shape long-term administrative policy and resource allocation.",
+      contacts: "Contacts at the highest organizational and external levels, including C-suite executives, government officials, external auditors, and peer institutions. Engages in high-level negotiation, policy development, and strategic coordination.",
+      physicalEnvironment: "Professional office environment with minimal physical demands. May include occasional travel.",
+      impact: "Affects the entire enterprise; shapes long-term policy.",
+      communication: "C-suite, government, peer-institution engagement.",
+      innovation: "Solves unprecedented systemic problems.",
+      risk: "Broad administrative/policy accountability.",
+      keywords: ["vp administration","vice president administration","senior director administration"] },
+    { code: "ST9", title: "Enterprise Administrative Executive", summary: "Sets enterprise-wide administrative vision, policy, and strategy at the executive level.", experience: "15+ yrs", stage: 6,
+      pointRange: "1850+ total points",
+      knowledge: "Expert knowledge of the theories, concepts, and techniques of enterprise administration, combined with deep understanding of the organization's strategic objectives and industry context. Leads unprecedented administrative initiatives and is recognized as an industry authority in administrative best practices.",
+      jobControls: "Functions with only the broadest policy direction. Defines enterprise administrative strategy, creates new organizational paradigms, and drives large-scale transformation initiatives. Work outcomes shape the entire organization's administrative infrastructure and culture.",
+      contacts: "Contacts at the most senior internal and external levels. Represents the organization in industry forums, regulatory proceedings, and strategic partnerships. Engages in high-stakes negotiation and long-range strategic planning.",
+      physicalEnvironment: "Executive office environment. Minimal physical demands with periodic travel.",
+      impact: "Shapes the entire organization's administrative infrastructure.",
+      communication: "Industry forums, regulatory proceedings, strategic partnerships.",
+      innovation: "Creates new organizational paradigms.",
+      risk: "Broadest policy direction; enterprise-level accountability.",
+      keywords: ["chief administrative officer","cao","chief operating officer administration"] }
   ]
 };
+
+/* In-memory band order + metadata. Mutated when the user adds/edits/removes
+   a custom band via the Framework tab. The base bands (P/M/E) come first
+   and cannot be deleted. */
+let FRAMEWORK_BANDS = BASE_FRAMEWORK_BANDS.map(b => ({ ...b }));
+
+/* User-added bands and user-added items, persisted in IDB. Items are keyed
+   by band key. Edits to built-in items are also stored here (in OVERRIDES)
+   so we never mutate the BASE_FRAMEWORK literal in place. */
+const STORAGE_KEY_FRAMEWORK = 'jobLevelingTool.framework.v1';
+let CUSTOM_BANDS = [];                 // [{key,name,color}]
+let CUSTOM_ITEMS = {};                 // { bandKey: [level, ...] }
+let FRAMEWORK_OVERRIDES = {};          // { code: { ...partialFields } } — edits to built-in items
+
+function getFrameworkBands() { return FRAMEWORK_BANDS; }
+function getFrameworkItems(bandKey) { return FRAMEWORK[bandKey] || []; }
+function allLevels() {
+  const out = [];
+  FRAMEWORK_BANDS.forEach(b => { (FRAMEWORK[b.key] || []).forEach(l => out.push(l)); });
+  return out;
+}
+function findBandForCode(code) {
+  if (!code) return null;
+  return FRAMEWORK_BANDS.find(b => (FRAMEWORK[b.key] || []).some(l => l.code === code)) || null;
+}
+function streamClassFor(code) {
+  // CSS pill class derived from band key (lowercased). Falls back to 's'
+  // (slate) for unknown bands so they still render with a tone.
+  const b = findBandForCode(code);
+  if (!b) return 's';
+  const k = b.key.toLowerCase();
+  return ['p','m','e','s','t','st'].includes(k) ? k : 's';
+}
+function ensureBandPillStyles() {
+  // Inject CSS classes for any custom band keys so .pill.<key> works.
+  let style = document.getElementById('__bandPillStyles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = '__bandPillStyles';
+    document.head.appendChild(style);
+  }
+  const rules = FRAMEWORK_BANDS
+    .filter(b => !['P','M','E'].includes(b.key))
+    .map(b => {
+      const k = b.key.toLowerCase();
+      const bg = b.color || '#eef0f3';
+      return `.pill.${cssIdent(k)} { background: ${bg}33; color: ${bg}; border:1px solid ${bg}55; }`;
+    });
+  style.textContent = rules.join('\n');
+}
+function cssIdent(s) { return String(s).replace(/[^a-z0-9_-]/gi, '_'); }
+
+/* Extract the band prefix (P, M, E, ST, or any custom multi-char key) from a level code like "P3" or "ST4" */
+function getBand(code) {
+  if (!code) return null;
+  const m = String(code).toUpperCase().match(/^([A-Z]+)/);
+  return m ? m[1] : null;
+}
+/* Extract the numeric suffix from a code like "P3" → 3 or "ST4" → 4 */
+function getLevelNum(code) {
+  if (!code) return NaN;
+  const m = String(code).match(/(\d+)$/);
+  return m ? parseInt(m[1], 10) : NaN;
+}
+
+function rebuildFramework() {
+  // Compose final FRAMEWORK = base items (with overrides applied) + custom items
+  const next = {};
+  // Base bands first
+  BASE_FRAMEWORK_BANDS.forEach(b => {
+    const baseItems = (FRAMEWORK[b.key] || []).filter(l => !l.__custom);
+    // baseItems above may already include overrides — get clean originals from
+    // a frozen snapshot below.
+    next[b.key] = [];
+  });
+  // Reset from frozen originals
+  Object.keys(BASE_FRAMEWORK_SNAPSHOT).forEach(k => {
+    next[k] = BASE_FRAMEWORK_SNAPSHOT[k].map(l => {
+      const ov = FRAMEWORK_OVERRIDES[l.code];
+      return ov ? { ...l, ...ov } : { ...l };
+    });
+  });
+  // Append custom items in built-in bands
+  Object.keys(CUSTOM_ITEMS).forEach(bk => {
+    if (!next[bk]) next[bk] = [];
+    CUSTOM_ITEMS[bk].forEach(it => next[bk].push({ ...it, __custom: true }));
+  });
+  // Custom bands
+  CUSTOM_BANDS.forEach(b => {
+    if (!next[b.key]) next[b.key] = [];
+    (CUSTOM_ITEMS[b.key] || []).forEach(it => {
+      // Already added above if band key collided; CUSTOM_ITEMS keyed by band
+    });
+  });
+  FRAMEWORK = next;
+  FRAMEWORK_BANDS = [
+    ...BASE_FRAMEWORK_BANDS.map(b => ({ ...b })),
+    ...CUSTOM_BANDS.map(b => ({ ...b }))
+  ];
+  ensureBandPillStyles();
+}
+
+// Snapshot the base items as-shipped so overrides can be applied non-destructively.
+const BASE_FRAMEWORK_SNAPSHOT = {
+  P: FRAMEWORK.P.map(l => ({ ...l })),
+  M: FRAMEWORK.M.map(l => ({ ...l })),
+  E: FRAMEWORK.E.map(l => ({ ...l })),
+  ST: FRAMEWORK.ST.map(l => ({ ...l }))
+};
+
+async function loadFramework() {
+  try {
+    const data = await idbGet(STORAGE_KEY_FRAMEWORK);
+    if (data && typeof data === 'object') {
+      CUSTOM_BANDS = Array.isArray(data.bands) ? data.bands : [];
+      CUSTOM_ITEMS = (data.items && typeof data.items === 'object') ? data.items : {};
+      FRAMEWORK_OVERRIDES = (data.overrides && typeof data.overrides === 'object') ? data.overrides : {};
+    }
+  } catch (err) {
+    console.warn('Could not load framework customizations:', err);
+  }
+  rebuildFramework();
+}
+let _saveFrameworkPending = null;
+function saveFramework() {
+  if (_saveFrameworkPending) clearTimeout(_saveFrameworkPending);
+  _saveFrameworkPending = setTimeout(() => {
+    _saveFrameworkPending = null;
+    idbSet(STORAGE_KEY_FRAMEWORK, {
+      bands: CUSTOM_BANDS,
+      items: CUSTOM_ITEMS,
+      overrides: FRAMEWORK_OVERRIDES
+    }).catch(err => showStorageError(err.message || String(err)));
+  }, 50);
+}
+function flushSaveFramework() {
+  if (!_saveFrameworkPending) return;
+  clearTimeout(_saveFrameworkPending);
+  _saveFrameworkPending = null;
+  idbSet(STORAGE_KEY_FRAMEWORK, {
+    bands: CUSTOM_BANDS,
+    items: CUSTOM_ITEMS,
+    overrides: FRAMEWORK_OVERRIDES
+  });
+}
 
 /* ============================================================
    JOB CATALOG (Job Link-style benchmark library)
@@ -2179,14 +2459,31 @@ async function exportFullBackup() {
       };
       req.onerror = () => reject(req.error);
     });
-    const blob = new Blob([JSON.stringify({
+    const json = JSON.stringify({
       schema: BACKUP_SCHEMA,
       exportedAt: new Date().toISOString(),
       data
-    }, null, 2)], { type: 'application/json' });
+    }, null, 2);
+    const suggestedName = `job-leveling-backup-${new Date().toISOString().slice(0,10)}.json`;
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'JSON backup', accept: { 'application/json': ['.json'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        // Fall through to anchor-download fallback on other errors.
+      }
+    }
+    const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `job-leveling-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = suggestedName;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -2298,7 +2595,35 @@ const TITLE_RULES = [
   // Entry
   { rx: /\b(junior|jr\.?|associate|graduate|trainee|intern|entry[- ]?level|coordinator)\b/i, code: "P1", w: 70 },
   // Generic IC baseline
-  { rx: /\b(engineer|developer|analyst|specialist|consultant|designer|scientist|accountant|marketer|writer|recruiter|planner|administrator|advisor|representative|counsel)\b/i, code: "P3", w: 50 }
+  { rx: /\b(engineer|developer|analyst|specialist|consultant|designer|scientist|accountant|marketer|writer|recruiter|planner|administrator|advisor|representative|counsel)\b/i, code: "P3", w: 50 },
+  // BLS Support (ST) levels — clerical, administrative support, and service roles
+  // ST6 — Advanced / Lead
+  { rx: /\b(chief of staff|administrative services manager|chief clerk)\b/i, code: "ST6", w: 80 },
+  { rx: /\bsenior (paralegal|office manager)\b/i, code: "ST6", w: 75 },
+  // ST5 — Specialist
+  { rx: /\b(office manager|records manager|administrative officer|office supervisor)\b/i, code: "ST5", w: 72 },
+  { rx: /\bsenior (executive assistant|bookkeeper|medical secretary)\b/i, code: "ST5", w: 70 },
+  { rx: /\b(medical coder|coding specialist)\b/i, code: "ST5", w: 68 },
+  // ST4 — Senior Clerical
+  { rx: /\b(executive secretary|executive assistant|office coordinator|administrative coordinator)\b/i, code: "ST4", w: 65 },
+  { rx: /\b(court clerk|loan clerk|procurement clerk|purchasing clerk)\b/i, code: "ST4", w: 62 },
+  { rx: /\bsenior (clerk|administrative assistant|secretary)\b/i, code: "ST4", w: 62 },
+  { rx: /\blead clerk\b/i, code: "ST4", w: 60 },
+  // ST3 — Qualified Clerical (most common support roles)
+  { rx: /\b(secretary|legal secretary|medical secretary)\b/i, code: "ST3", w: 58 },
+  { rx: /\b(bank teller|teller)\b/i, code: "ST3", w: 58 },
+  { rx: /\b(cashier|checker)\b/i, code: "ST3", w: 55 },
+  { rx: /\b(bookkeeper|accounting clerk|payroll clerk|billing clerk)\b/i, code: "ST3", w: 58 },
+  { rx: /\b(medical records clerk|personnel clerk|insurance clerk|claims clerk)\b/i, code: "ST3", w: 58 },
+  { rx: /\badministrative assistant\b/i, code: "ST3", w: 55 },
+  { rx: /\b(word processor|transcriptionist)\b/i, code: "ST3", w: 55 },
+  // ST2 — Developing Clerical
+  { rx: /\b(receptionist|front desk|switchboard operator)\b/i, code: "ST2", w: 55 },
+  { rx: /\b(data entry|typist|keyboard operator)\b/i, code: "ST2", w: 52 },
+  { rx: /\b(office assistant|office clerk|general clerk)\b/i, code: "ST2", w: 50 },
+  { rx: /\b(mail room clerk|mailroom)\b/i, code: "ST2", w: 50 },
+  // ST1 — Entry Clerical
+  { rx: /\b(file clerk|filing clerk|copy clerk|mail clerk|office aide|messenger|office helper)\b/i, code: "ST1", w: 55 }
 ];
 
 function suggestLevel(title, responsibilities, managesPeople) {
@@ -2350,8 +2675,12 @@ function suggestLevel(title, responsibilities, managesPeople) {
 
 function findLevel(code) {
   if (!code) return null;
-  const band = code[0];
-  return FRAMEWORK[band] ? FRAMEWORK[band].find(l => l.code === code) : null;
+  for (const b of FRAMEWORK_BANDS) {
+    const items = FRAMEWORK[b.key] || [];
+    const hit = items.find(l => l.code === code);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /* Find best benchmark match in the catalog */
@@ -2737,8 +3066,8 @@ function reconcileLevels(titleSuggestion, impactSuggestion) {
     };
   }
 
-  // Different bands (P vs M vs E) — leadership score is the tiebreaker
-  if (titleSuggestion.code[0] !== impactSuggestion.code[0]) {
+  // Different bands (P vs M vs E vs ST) — leadership score is the tiebreaker
+  if (getBand(titleSuggestion.code) !== getBand(impactSuggestion.code)) {
     // Trust impact if leadership has been scored (it's the key band differentiator)
     if (factorScores.leadership !== null) {
       return {
@@ -2751,11 +3080,11 @@ function reconcileLevels(titleSuggestion, impactSuggestion) {
   }
 
   // Same band, different stage — average and lean toward impact if assessment is >=80% complete
-  const tNum = parseInt(titleSuggestion.code[1]);
-  const iNum = parseInt(impactSuggestion.code[1]);
+  const tNum = getLevelNum(titleSuggestion.code);
+  const iNum = getLevelNum(impactSuggestion.code);
   if (impactSuggestion.completeness >= 80) {
     const avg = Math.round((tNum + iNum) / 2);
-    const finalCode = impactSuggestion.code[0] + avg;
+    const finalCode = getBand(impactSuggestion.code) + avg;
     return {
       final: finalCode,
       method: "blended",
@@ -2789,7 +3118,8 @@ let state = {
 const STREAMS = [
   { id: "P", name: "Professional (IC)", color: "var(--p-color)" },
   { id: "M", name: "Management", color: "var(--m-color)" },
-  { id: "E", name: "Executive", color: "var(--e-color)" }
+  { id: "E", name: "Executive", color: "var(--e-color)" },
+  { id: "ST", name: "Support (BLS)", color: "var(--st-color)" }
 ];
 
 function renderSidebar() {
@@ -2812,32 +3142,7 @@ function renderSidebar() {
     streamList.appendChild(el);
   });
 
-  // Families
-  const famList = document.getElementById('familyList');
-  famList.innerHTML = '';
-  const allF = document.createElement('div');
-  allF.className = 'stream' + (!state.selectedFamily ? ' active' : '');
-  allF.innerHTML = `<span class="dot" style="background:#94a3b8"></span> All Families`;
-  allF.onclick = () => { state.selectedFamily = null; render(); };
-  famList.appendChild(allF);
-
-  getFamilies().forEach(f => {
-    const el = document.createElement('div');
-    el.className = 'family' + (state.selectedFamily === f.id ? ' active' : '');
-    el.textContent = f.name;
-    el.onclick = () => { state.selectedFamily = f.id; render(); };
-    famList.appendChild(el);
-  });
-
-  // Quick filter counts
-  document.getElementById('cnt-ic').textContent = getCatalog().filter(j => j.stream === 'P').length;
-  document.getElementById('cnt-mgr').textContent = getCatalog().filter(j => j.stream === 'M').length;
-  document.getElementById('cnt-sr').textContent = getCatalog().filter(j => j.stream === 'M' && parseInt(j.level[1]) >= 4).length;
 }
-
-document.getElementById('filter-ic').onclick = () => { state.selectedStream = 'P'; render(); };
-document.getElementById('filter-mgr').onclick = () => { state.selectedStream = 'M'; render(); };
-document.getElementById('filter-sr').onclick = () => { state.selectedStream = 'M'; render(); };
 
 /* Top navigation */
 document.querySelectorAll('.topbar .nav button').forEach(btn => {
@@ -2846,6 +3151,7 @@ document.querySelectorAll('.topbar .nav button').forEach(btn => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    document.getElementById('appLayout').classList.toggle('no-sidebar', btn.dataset.view !== 'catalog');
   };
 });
 
@@ -2870,7 +3176,7 @@ function populateCatalogFilters() {
   const deptSel = document.getElementById('catalogDeptFilter');
   if (deptSel) {
     const prev = deptSel.value;
-    deptSel.innerHTML = '<option value="">All departments</option>' +
+    deptSel.innerHTML = '<option value="">All families</option>' +
       getFamilies().map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
     deptSel.value = state.selectedFamily || prev || '';
   }
@@ -2904,8 +3210,10 @@ function populateCatalogFilters() {
   if (lvlSel) {
     const prev = lvlSel.value;
     let html = '<option value="">All levels</option>';
-    [['Professional (IC)', FRAMEWORK.P], ['Management', FRAMEWORK.M], ['Executive', FRAMEWORK.E]].forEach(([grp, lvls]) => {
-      html += `<optgroup label="${grp}">` +
+    FRAMEWORK_BANDS.forEach(b => {
+      const lvls = FRAMEWORK[b.key] || [];
+      if (lvls.length === 0) return;
+      html += `<optgroup label="${escapeHtml(b.name)}">` +
         lvls.map(l => `<option value="${l.code}">${l.code} — ${escapeHtml(l.title)}</option>`).join('') +
         `</optgroup>`;
     });
@@ -2937,7 +3245,7 @@ function renderActiveFilterChips(totalShown) {
   }
   if (state.selectedFamily) {
     const fam = getFamilies().find(f => f.id === state.selectedFamily);
-    chips.push({ label: `Dept: ${fam ? fam.name : state.selectedFamily}`, clear: () => { state.selectedFamily = null; state.selectedSubFamily = null; render(); } });
+    chips.push({ label: `Family: ${fam ? fam.name : state.selectedFamily}`, clear: () => { state.selectedFamily = null; state.selectedSubFamily = null; render(); } });
   }
   if (state.selectedSubFamily) {
     // Find sub-family name from catalog
@@ -3061,6 +3369,9 @@ document.getElementById('resetFiltersBtn').onclick = () => {
   state.selectedLevel = null;
   state.searchQuery = "";
   document.getElementById('catalogSearch').value = "";
+  document.getElementById('catalogDeptFilter').value = "";
+  document.getElementById('catalogSubFamilyFilter').value = "";
+  document.getElementById('catalogLevelFilter').value = "";
   render();
 };
 
@@ -3123,57 +3434,362 @@ document.getElementById('modal').onclick = (e) => { if (e.target.id === 'modal')
 /* ============================================================
    FRAMEWORK VIEW
    ============================================================ */
+let currentFrameworkBand = 'P';
+
+function renderFrameworkSubtabs() {
+  const wrap = document.getElementById('frameworkSubtabs');
+  if (!wrap) return;
+  if (!FRAMEWORK_BANDS.some(b => b.key === currentFrameworkBand)) {
+    currentFrameworkBand = FRAMEWORK_BANDS[0]?.key || 'P';
+  }
+  wrap.innerHTML = FRAMEWORK_BANDS.map(b => {
+    const count = (FRAMEWORK[b.key] || []).length;
+    const active = b.key === currentFrameworkBand ? ' active' : '';
+    return `<div class="subtab${active}" data-band="${escapeHtml(b.key)}">${escapeHtml(b.name)} (${count})</div>`;
+  }).join('');
+  wrap.querySelectorAll('.subtab').forEach(t => {
+    t.onclick = () => {
+      currentFrameworkBand = t.dataset.band;
+      renderFrameworkSubtabs();
+      renderFrameworkBand(currentFrameworkBand);
+    };
+  });
+}
+
 function renderFrameworkBand(band) {
+  currentFrameworkBand = band;
   const grid = document.getElementById('frameworkGrid');
-  grid.innerHTML = FRAMEWORK[band].map(lvl => `
-    <div class="job-card" data-level="${lvl.code}">
-      <div class="code">${lvl.code} • Stage ${lvl.stage}</div>
-      <div class="title">${lvl.title}</div>
-      <div class="meta">${lvl.summary}</div>
+  const items = FRAMEWORK[band] || [];
+  if (items.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1; padding:40px; text-align:center; color:var(--muted); border:1px dashed var(--border-strong); border-radius:8px;">No items in this band yet. Click <strong>+ Add Item</strong> to create one.</div>`;
+    return;
+  }
+  const pillCls = streamClassFor(items[0].code);
+  grid.innerHTML = items.map(lvl => `
+    <div class="job-card${lvl.__custom ? ' custom' : ''}" data-level="${escapeHtml(lvl.code)}">
+      <button class="remove-btn" data-edit="${escapeHtml(lvl.code)}" title="Edit item" style="display:inline-flex; right:34px;">✎</button>
+      ${lvl.__custom ? `<button class="remove-btn" data-delete="${escapeHtml(lvl.code)}" title="Delete item">×</button>` : ''}
+      <div class="code">${escapeHtml(lvl.code)} • Stage ${lvl.stage}</div>
+      <div class="title">${escapeHtml(lvl.title)}</div>
+      <div class="meta">${escapeHtml(lvl.summary || '')}</div>
       <div class="pills">
-        <span class="pill ${band.toLowerCase()}">${lvl.code}</span>
-        <span class="pill muted">${lvl.experience}</span>
+        <span class="pill ${pillCls}">${escapeHtml(lvl.code)}</span>
+        ${lvl.experience ? `<span class="pill muted">${escapeHtml(lvl.experience)}</span>` : ''}
+        ${lvl.pointRange ? `<span class="pill muted">${escapeHtml(lvl.pointRange)}</span>` : ''}
+        ${lvl.__custom ? '<span class="pill custom">Custom</span>' : ''}
       </div>
     </div>
   `).join('');
   grid.querySelectorAll('.job-card').forEach(c => {
-    c.onclick = () => openLevelModal(c.dataset.level);
+    c.onclick = (e) => {
+      if (e.target.closest('[data-edit]')) {
+        e.stopPropagation();
+        openItemEditor(c.dataset.level);
+      } else if (e.target.closest('[data-delete]')) {
+        e.stopPropagation();
+        deleteFrameworkItem(c.dataset.level);
+      } else {
+        openLevelModal(c.dataset.level);
+      }
+    };
   });
+}
+
+function deleteFrameworkItem(code) {
+  const b = findBandForCode(code);
+  if (!b) return;
+  const arr = CUSTOM_ITEMS[b.key] || [];
+  const idx = arr.findIndex(l => l.code === code);
+  if (idx === -1) return; // built-in items aren't deletable here
+  if (!confirm(`Delete ${code} from the framework?`)) return;
+  arr.splice(idx, 1);
+  CUSTOM_ITEMS[b.key] = arr;
+  rebuildFramework();
+  saveFramework();
+  renderFrameworkSubtabs();
+  renderFrameworkBand(currentFrameworkBand);
+  refreshLevelDependents();
+}
+
+function deleteFrameworkBand(key) {
+  if (BASE_FRAMEWORK_BANDS.some(b => b.key === key)) {
+    alert('Built-in bands (Professional, Management, Executive) cannot be deleted.');
+    return;
+  }
+  const items = (CUSTOM_ITEMS[key] || []).length;
+  if (!confirm(`Delete the "${key}" band${items ? ' and its ' + items + ' item(s)' : ''}?`)) return;
+  CUSTOM_BANDS = CUSTOM_BANDS.filter(b => b.key !== key);
+  delete CUSTOM_ITEMS[key];
+  rebuildFramework();
+  saveFramework();
+  if (currentFrameworkBand === key) currentFrameworkBand = FRAMEWORK_BANDS[0].key;
+  renderFrameworkSubtabs();
+  renderFrameworkBand(currentFrameworkBand);
+  refreshLevelDependents();
+}
+
+function refreshLevelDependents() {
+  // Re-render anything that lists levels/bands
+  populateOverrideSel?.();
+  if (typeof populateAddLevels === 'function') populateAddLevels();
+  if (typeof renderCareerPath === 'function') renderCareerPath();
+  if (typeof renderCatalog === 'function') renderCatalog();
+}
+
+/* ----- Add / Edit Band modal ----- */
+function openBandEditor(existingKey) {
+  const isEdit = !!existingKey;
+  const band = isEdit ? FRAMEWORK_BANDS.find(b => b.key === existingKey) : { key: '', name: '', color: '#64748b' };
+  if (!band) return;
+  const isBuiltin = isEdit && BASE_FRAMEWORK_BANDS.some(b => b.key === existingKey);
+
+  document.getElementById('modalTitle').textContent = isEdit ? `Edit Band: ${band.name}` : 'Add Level Band';
+  document.getElementById('modalSub').textContent = '';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-grid">
+      <div>
+        <label>Band Key (1–3 chars, e.g. "T")</label>
+        <input type="text" id="bandKeyInput" value="${escapeHtml(band.key)}" ${isEdit ? 'disabled' : ''} maxlength="3" />
+      </div>
+      <div>
+        <label>Display Name</label>
+        <input type="text" id="bandNameInput" value="${escapeHtml(band.name)}" placeholder="e.g. Technical" />
+      </div>
+    </div>
+    <div class="form-grid">
+      <div>
+        <label>Color (hex or CSS var)</label>
+        <input type="text" id="bandColorInput" value="${escapeHtml(band.color || '#64748b')}" placeholder="#64748b" />
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:14px; justify-content:flex-end;">
+      ${isEdit && !isBuiltin ? '<button class="btn btn-ghost" id="bandDeleteBtn" style="color:var(--danger);">Delete band</button>' : ''}
+      <button class="btn btn-ghost" id="bandCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="bandSaveBtn">${isEdit ? 'Save' : 'Add Band'}</button>
+    </div>
+  `;
+  document.getElementById('modal').classList.add('active');
+
+  document.getElementById('bandCancelBtn').onclick = () => document.getElementById('modal').classList.remove('active');
+  const delBtn = document.getElementById('bandDeleteBtn');
+  if (delBtn) delBtn.onclick = () => { document.getElementById('modal').classList.remove('active'); deleteFrameworkBand(existingKey); };
+  document.getElementById('bandSaveBtn').onclick = () => {
+    const key = document.getElementById('bandKeyInput').value.trim().toUpperCase();
+    const name = document.getElementById('bandNameInput').value.trim();
+    const color = document.getElementById('bandColorInput').value.trim() || '#64748b';
+    if (!key || !name) { alert('Band key and name are required.'); return; }
+    if (!/^[A-Z][A-Z0-9]{0,2}$/.test(key)) { alert('Band key must start with a letter and be 1–3 alphanumeric chars.'); return; }
+    if (!isEdit && FRAMEWORK_BANDS.some(b => b.key === key)) { alert('A band with that key already exists.'); return; }
+
+    if (isEdit) {
+      if (isBuiltin) {
+        // Only allow renaming/recoloring for built-ins — key stays fixed.
+        const baseRef = FRAMEWORK_BANDS.find(b => b.key === existingKey);
+        baseRef.name = name; baseRef.color = color;
+        // Persist via OVERRIDES on a per-band basis using a synthetic record.
+        FRAMEWORK_OVERRIDES['__band:' + existingKey] = { name, color };
+      } else {
+        const cust = CUSTOM_BANDS.find(b => b.key === existingKey);
+        if (cust) { cust.name = name; cust.color = color; }
+      }
+    } else {
+      CUSTOM_BANDS.push({ key, name, color });
+      CUSTOM_ITEMS[key] = CUSTOM_ITEMS[key] || [];
+    }
+    rebuildFramework();
+    // Re-apply band overrides for built-ins (rebuildFramework restores defaults)
+    Object.keys(FRAMEWORK_OVERRIDES).forEach(k => {
+      if (k.startsWith('__band:')) {
+        const bk = k.slice(7);
+        const ref = FRAMEWORK_BANDS.find(x => x.key === bk);
+        if (ref) Object.assign(ref, FRAMEWORK_OVERRIDES[k]);
+      }
+    });
+    ensureBandPillStyles();
+    saveFramework();
+    document.getElementById('modal').classList.remove('active');
+    if (!isEdit) currentFrameworkBand = key;
+    renderFrameworkSubtabs();
+    renderFrameworkBand(currentFrameworkBand);
+    refreshLevelDependents();
+  };
+}
+
+/* ----- Add / Edit Item modal ----- */
+function openItemEditor(existingCode) {
+  const isEdit = !!existingCode;
+  const existing = isEdit ? findLevel(existingCode) : null;
+  if (isEdit && !existing) return;
+  const bandKey = isEdit ? findBandForCode(existingCode).key : currentFrameworkBand;
+  const isBuiltin = isEdit && !existing.__custom;
+
+  const v = existing || { code: '', title: '', summary: '', experience: '', stage: 3, impact: '', communication: '', innovation: '', knowledge: '', risk: '', keywords: [] };
+
+  document.getElementById('modalTitle').textContent = isEdit ? `Edit ${existing.code}` : `Add Item to ${FRAMEWORK_BANDS.find(b => b.key === bandKey)?.name || bandKey}`;
+  document.getElementById('modalSub').textContent = '';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-grid">
+      <div>
+        <label>Code (e.g. ${escapeHtml(bandKey)}1)</label>
+        <input type="text" id="itemCode" value="${escapeHtml(v.code)}" ${isEdit ? 'disabled' : ''} />
+      </div>
+      <div>
+        <label>Title</label>
+        <input type="text" id="itemTitle" value="${escapeHtml(v.title)}" />
+      </div>
+    </div>
+    <div class="form-grid">
+      <div>
+        <label>Experience</label>
+        <input type="text" id="itemExp" value="${escapeHtml(v.experience || '')}" placeholder="e.g. 3–5 yrs" />
+      </div>
+      <div>
+        <label>Stage (1–6)</label>
+        <input type="text" id="itemStage" value="${escapeHtml(String(v.stage || 3))}" />
+      </div>
+    </div>
+    <div class="form-grid single">
+      <div>
+        <label>Summary</label>
+        <textarea id="itemSummary">${escapeHtml(v.summary || '')}</textarea>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div><label>Impact</label><textarea id="itemImpact">${escapeHtml(v.impact || '')}</textarea></div>
+      <div><label>Communication</label><textarea id="itemComm">${escapeHtml(v.communication || '')}</textarea></div>
+    </div>
+    <div class="form-grid">
+      <div><label>Innovation</label><textarea id="itemInnov">${escapeHtml(v.innovation || '')}</textarea></div>
+      <div><label>Knowledge</label><textarea id="itemKnow">${escapeHtml(v.knowledge || '')}</textarea></div>
+    </div>
+    <div class="form-grid single">
+      <div><label>Risk / Accountability</label><textarea id="itemRisk">${escapeHtml(v.risk || '')}</textarea></div>
+    </div>
+    <div class="form-grid single">
+      <div>
+        <label>Keywords (comma-separated, used for title matching)</label>
+        <input type="text" id="itemKeywords" value="${escapeHtml((v.keywords || []).join(', '))}" />
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:14px; justify-content:flex-end;">
+      ${isEdit && !isBuiltin ? '<button class="btn btn-ghost" id="itemDeleteBtn" style="color:var(--danger);">Delete item</button>' : ''}
+      <button class="btn btn-ghost" id="itemCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="itemSaveBtn">${isEdit ? 'Save' : 'Add Item'}</button>
+    </div>
+  `;
+  document.getElementById('modal').classList.add('active');
+
+  document.getElementById('itemCancelBtn').onclick = () => document.getElementById('modal').classList.remove('active');
+  const delBtn = document.getElementById('itemDeleteBtn');
+  if (delBtn) delBtn.onclick = () => { document.getElementById('modal').classList.remove('active'); deleteFrameworkItem(existingCode); };
+  document.getElementById('itemSaveBtn').onclick = () => {
+    const code = isEdit ? existingCode : document.getElementById('itemCode').value.trim().toUpperCase();
+    const title = document.getElementById('itemTitle').value.trim();
+    const stage = parseInt(document.getElementById('itemStage').value, 10) || 3;
+    if (!code || !title) { alert('Code and Title are required.'); return; }
+    if (!isEdit && findLevel(code)) { alert('An item with that code already exists.'); return; }
+
+    const next = {
+      code,
+      title,
+      summary: document.getElementById('itemSummary').value.trim(),
+      experience: document.getElementById('itemExp').value.trim(),
+      stage: Math.max(1, Math.min(6, stage)),
+      impact: document.getElementById('itemImpact').value.trim(),
+      communication: document.getElementById('itemComm').value.trim(),
+      innovation: document.getElementById('itemInnov').value.trim(),
+      knowledge: document.getElementById('itemKnow').value.trim(),
+      risk: document.getElementById('itemRisk').value.trim(),
+      keywords: document.getElementById('itemKeywords').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    };
+
+    if (isEdit) {
+      if (isBuiltin) {
+        FRAMEWORK_OVERRIDES[code] = next;
+      } else {
+        const arr = CUSTOM_ITEMS[bandKey] || [];
+        const idx = arr.findIndex(l => l.code === code);
+        if (idx >= 0) arr[idx] = next;
+        CUSTOM_ITEMS[bandKey] = arr;
+      }
+    } else {
+      CUSTOM_ITEMS[bandKey] = CUSTOM_ITEMS[bandKey] || [];
+      CUSTOM_ITEMS[bandKey].push(next);
+    }
+    rebuildFramework();
+    // Re-apply band overrides after rebuild
+    Object.keys(FRAMEWORK_OVERRIDES).forEach(k => {
+      if (k.startsWith('__band:')) {
+        const bk = k.slice(7);
+        const ref = FRAMEWORK_BANDS.find(x => x.key === bk);
+        if (ref) Object.assign(ref, FRAMEWORK_OVERRIDES[k]);
+      }
+    });
+    saveFramework();
+    document.getElementById('modal').classList.remove('active');
+    renderFrameworkSubtabs();
+    renderFrameworkBand(currentFrameworkBand);
+    refreshLevelDependents();
+  };
 }
 function openLevelModal(code) {
   const lvl = findLevel(code);
   if (!lvl) return;
   document.getElementById('modalTitle').textContent = `${lvl.code} — ${lvl.title}`;
-  document.getElementById('modalSub').textContent = `Career Stage ${lvl.stage} • ${lvl.experience}`;
-  document.getElementById('modalBody').innerHTML = `
-    <p style="font-size:14px; line-height:1.6;">${lvl.summary}</p>
-    <h5>Impact</h5><p>${lvl.impact}</p>
-    <h5>Communication</h5><p>${lvl.communication}</p>
-    <h5>Innovation</h5><p>${lvl.innovation}</p>
-    <h5>Knowledge</h5><p>${lvl.knowledge}</p>
-    <h5>Risk / Accountability</h5><p>${lvl.risk}</p>
-  `;
+  let bodyHtml;
+  if (getBand(code) === 'ST' && (lvl.jobControls || lvl.contacts || lvl.physicalEnvironment)) {
+    // BLS Support levels use NCS four-factor structure
+    document.getElementById('modalSub').textContent = `Career Stage ${lvl.stage} • ${lvl.experience}${lvl.pointRange ? ' • ' + lvl.pointRange : ''}`;
+    bodyHtml = `
+      <p style="font-size:14px; line-height:1.6;">${lvl.summary || ''}</p>
+      <h5>Factor 1 — Knowledge</h5><p>${lvl.knowledge || ''}</p>
+      <h5>Factor 2 — Job Controls &amp; Complexity</h5><p>${lvl.jobControls || ''}</p>
+      <h5>Factor 3 — Contacts</h5><p>${lvl.contacts || ''}</p>
+      <h5>Factor 4 — Physical Environment</h5><p>${lvl.physicalEnvironment || ''}</p>
+      ${lvl.pointRange ? `<div style="margin-top:14px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; font-size:12px; color:var(--muted);">
+        <strong style="color:var(--text);">BLS NCS Point Range:</strong> ${lvl.pointRange}<br>
+        Based on the Bureau of Labor Statistics National Compensation Survey point-factor leveling system for Office &amp; Administrative Support occupations.
+      </div>` : ''}
+    `;
+  } else {
+    // Standard Mercer P/M/E (and custom) levels
+    document.getElementById('modalSub').textContent = `Career Stage ${lvl.stage} • ${lvl.experience || ''}`;
+    bodyHtml = `
+      <p style="font-size:14px; line-height:1.6;">${lvl.summary || ''}</p>
+      <h5>Impact</h5><p>${lvl.impact || ''}</p>
+      <h5>Communication</h5><p>${lvl.communication || ''}</p>
+      <h5>Innovation</h5><p>${lvl.innovation || ''}</p>
+      <h5>Knowledge</h5><p>${lvl.knowledge || ''}</p>
+      <h5>Risk / Accountability</h5><p>${lvl.risk || ''}</p>
+    `;
+  }
+  document.getElementById('modalBody').innerHTML = bodyHtml;
   document.getElementById('modal').classList.add('active');
 }
-document.querySelectorAll('#view-framework .subtab').forEach(t => {
-  t.onclick = () => {
-    document.querySelectorAll('#view-framework .subtab').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    renderFrameworkBand(t.dataset.band);
-  };
+document.getElementById('addFrameworkBandBtn').onclick = () => openBandEditor(null);
+document.getElementById('addFrameworkItemBtn').onclick = () => openItemEditor(null);
+// Allow renaming a band (including built-ins) via double-click on its subtab
+document.getElementById('frameworkSubtabs').addEventListener('dblclick', (e) => {
+  const t = e.target.closest('.subtab');
+  if (!t) return;
+  openBandEditor(t.dataset.band);
 });
 
 /* ============================================================
    JOB MATCH (single)
    ============================================================ */
-const allCodes = [...FRAMEWORK.P, ...FRAMEWORK.M, ...FRAMEWORK.E].map(l => l.code);
-const overrideSel = document.getElementById('mOverride');
-allCodes.forEach(c => {
-  const o = document.createElement('option');
-  o.value = c;
-  o.textContent = `${c} – ${findLevel(c).title}`;
-  overrideSel.appendChild(o);
-});
+function populateOverrideSel() {
+  const overrideSel = document.getElementById('mOverride');
+  if (!overrideSel) return;
+  overrideSel.innerHTML = '';
+  allLevels().forEach(l => {
+    const o = document.createElement('option');
+    o.value = l.code;
+    o.textContent = `${l.code} – ${l.title}`;
+    overrideSel.appendChild(o);
+  });
+}
+populateOverrideSel();
 
 let currentMatchState = null;
 
@@ -3210,7 +3826,7 @@ function renderMatchResults() {
   document.getElementById('mResults').style.display = 'block';
 
   document.getElementById('mqLevel').textContent = finalCode;
-  document.getElementById('mqStream').textContent = finalCode[0];
+  document.getElementById('mqStream').textContent = getBand(finalCode);
   document.getElementById('mqStream').style.fontSize = '22px';
   const ql = matchQualityLabel(quality);
   document.getElementById('mqMatch').textContent = ql.label;
@@ -3299,7 +3915,7 @@ document.getElementById('mOverride').onchange = (e) => {
   const code = e.target.value;
   const lvl = findLevel(code);
   document.getElementById('mqLevel').textContent = code;
-  document.getElementById('mqStream').textContent = code[0];
+  document.getElementById('mqStream').textContent = getBand(code);
   document.getElementById('mqStage').textContent = lvl.stage;
 
   // Re-find benchmark at new level
@@ -3434,8 +4050,8 @@ document.getElementById('runEvalBtn').onclick = () => {
     const normCurrent = normalizeLevel(current);
     if (suggestion && normCurrent) {
       if (normCurrent === suggestion.code) delta = 'match';
-      else if (normCurrent[0] === suggestion.code[0]) {
-        const cn = parseInt(normCurrent[1]); const sn = parseInt(suggestion.code[1]);
+      else if (getBand(normCurrent) === getBand(suggestion.code)) {
+        const cn = getLevelNum(normCurrent); const sn = getLevelNum(suggestion.code);
         delta = sn > cn ? 'up' : (sn < cn ? 'down' : 'match');
       } else delta = 'cross';
     }
@@ -3447,7 +4063,12 @@ document.getElementById('runEvalBtn').onclick = () => {
 
 function normalizeLevel(s) {
   if (!s) return null;
-  const m = s.toUpperCase().match(/([PME])\s*0?([1-7])/);
+  const upper = s.toUpperCase();
+  // Try ST first (e.g., "ST3", "ST 4")
+  const stMatch = upper.match(/ST\s*0?([1-9])/);
+  if (stMatch) return 'ST' + stMatch[1];
+  // Then try P/M/E
+  const m = upper.match(/([PME])\s*0?([1-7])/);
   return m ? m[1] + m[2] : null;
 }
 
@@ -3629,7 +4250,7 @@ document.getElementById('filterDelta').onchange = renderResults;
 function renderPill(code) {
   if (!code) return '<span class="pill muted">—</span>';
   const c = code.toUpperCase();
-  const cls = c.startsWith('P') ? 'p' : c.startsWith('M') ? 'm' : c.startsWith('E') ? 'e' : 'muted';
+  const cls = c.startsWith('ST') ? 'st' : c.startsWith('P') ? 'p' : c.startsWith('M') ? 'm' : c.startsWith('E') ? 'e' : 'muted';
   return `<span class="pill ${cls}">${c}</span>`;
 }
 function renderDelta(d) {
@@ -3701,13 +4322,13 @@ document.getElementById('exportXlsxBtn').onclick = () => {
 function populateAddLevels() {
   const sel = document.getElementById('addLevel');
   sel.innerHTML = '';
-  [...FRAMEWORK.P, ...FRAMEWORK.M, ...FRAMEWORK.E].forEach(l => {
+  allLevels().forEach(l => {
     const o = document.createElement('option');
     o.value = l.code;
     o.textContent = `${l.code} – ${l.title}`;
     sel.appendChild(o);
   });
-  sel.value = 'P3';
+  if ([...sel.options].some(o => o.value === 'P3')) sel.value = 'P3';
 }
 
 function populateAddFamilies() {
@@ -4056,13 +4677,33 @@ function doCatalogImport(map) {
     const rowSource = map.source ? (row[map.source] || '').toString().trim() : '';
     const source = rowSource || defaultSource;
 
-    if (!title || !famName || !levelRaw) { skipped++; return; }
+    if (!title || !famName || !levelRaw) {
+      const missing = [];
+      if (!title) missing.push('Title');
+      if (!famName) missing.push('Family');
+      if (!levelRaw) missing.push('Level');
+      skipped++;
+      errors.push({ row: idx + 1, severity: 'error', category: 'missing-required', title: title || '(blank)', message: `Missing required field(s): ${missing.join(', ')}` });
+      return;
+    }
 
-    // Normalize level
-    const lvlMatch = levelRaw.toUpperCase().match(/([PME])\s*0?([1-7])/);
-    if (!lvlMatch) { skipped++; errors.push(`Row ${idx+1}: level "${levelRaw}" not recognized.`); return; }
-    const level = lvlMatch[1] + lvlMatch[2];
-    if (!findLevel(level)) { skipped++; errors.push(`Row ${idx+1}: level "${level}" not in framework.`); return; }
+    // Normalize level — accept P/M/E and ST
+    let level = null;
+    const upper = levelRaw.toUpperCase();
+    const stMatch = upper.match(/ST\s*0?([1-9])/);
+    if (stMatch) {
+      level = 'ST' + stMatch[1];
+    } else {
+      const pmeMatch = upper.match(/([PME])\s*0?([1-7])/);
+      if (pmeMatch) level = pmeMatch[1] + pmeMatch[2];
+    }
+    if (!level) { skipped++; errors.push({ row: idx + 1, severity: 'error', category: 'bad-level', title, message: `Level "${levelRaw}" not recognized (expected like P3, M2, E5, or ST3).` }); return; }
+    if (!findLevel(level)) { skipped++; errors.push({ row: idx + 1, severity: 'error', category: 'unknown-level', title, message: `Level "${level}" is not in the framework.` }); return; }
+
+    // Family name sanity check
+    if (famName.length > 60) {
+      errors.push({ row: idx + 1, severity: 'warn', category: 'long-family', title, message: `Family name is unusually long (${famName.length} chars); may indicate a column mapping error.` });
+    }
 
     // Find/create family
     let fam = getFamilies().find(f => f.name.toLowerCase() === famName.toLowerCase() || f.id.toLowerCase() === famName.toLowerCase());
@@ -4070,6 +4711,7 @@ function doCatalogImport(map) {
       const newId = famName.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4) || ('FAM' + Date.now().toString().slice(-3) + idx);
       fam = { id: newId, name: famName, subs: [] };
       CUSTOM_FAMILIES.push(fam);
+      errors.push({ row: idx + 1, severity: 'info', category: 'new-family', title, message: `Created new job family "${famName}" (ID: ${newId}).` });
     }
 
     // Find/create sub
@@ -4081,14 +4723,31 @@ function doCatalogImport(map) {
     }
 
     const code = codeRaw || genCustomCode(fam.id, sub.id, level, title);
-    if (getCatalog().some(j => j.code === code)) { skipped++; errors.push(`Row ${idx+1}: code "${code}" already exists.`); return; }
+    if (getCatalog().some(j => j.code === code)) { skipped++; errors.push({ row: idx + 1, severity: 'error', category: 'duplicate-code', title, message: `Job code "${code}" already exists in the catalog.` }); return; }
+
+    // Title heuristic warnings
+    if (title.length < 3) {
+      errors.push({ row: idx + 1, severity: 'warn', category: 'short-title', title, message: `Title "${title}" seems too short. May be a code or abbreviation rather than a full job title.` });
+    }
+    if (/^\d+$/.test(title)) {
+      errors.push({ row: idx + 1, severity: 'warn', category: 'numeric-title', title, message: `Title is numeric only ("${title}"); likely a column mapping error.` });
+    }
+
+    // Stream / level mismatch warnings
+    const band = getBand(level);
+    if (band === 'M' && /\b(clerk|teller|cashier|receptionist|secretary)\b/i.test(title)) {
+      errors.push({ row: idx + 1, severity: 'warn', category: 'level-mismatch-mgmt', title, message: `Title sounds like a support/clerical role but is assigned Management level "${level}". Consider an ST or P level instead.` });
+    }
+    if (band === 'ST' && /\b(manager|director|vp|vice president|chief|executive)\b/i.test(title)) {
+      errors.push({ row: idx + 1, severity: 'warn', category: 'level-mismatch-support', title, message: `Title contains management keywords but is assigned Support level "${level}". Consider an M (Management) level instead.` });
+    }
 
     const lvl = findLevel(level);
     CUSTOM_CATALOG.push({
       code, title,
       family: fam.id, familyName: fam.name,
       sub: sub.id, subName: sub.name,
-      stream: level[0], level: level,
+      stream: band, level: level,
       stage: lvl.stage,
       isCustom: true,
       customSummary: summary || null,
@@ -4107,13 +4766,23 @@ function doCatalogImport(map) {
   document.getElementById('catalogMapper').style.display = 'none';
   catalogParsedData = null; catalogFileInput.value = '';
 
-  let msg = `Added ${added} positions to catalog.`;
-  if (skipped) msg += ` Skipped ${skipped} row(s).`;
-  if (errors.length) msg += `\n\nFirst few issues:\n` + errors.slice(0, 5).join('\n');
-
-  // Show the import-complete panel instead of just an alert
+  // Show the import-complete panel
   document.getElementById('catalogDropZone').style.display = 'none';
-  document.getElementById('importCompleteMsg').textContent = `${added} position${added !== 1 ? 's' : ''} imported`;
+
+  const banner = document.getElementById('importCompleteBanner');
+  const icon = document.getElementById('importCompleteIcon');
+  if (added === 0) {
+    banner.style.background = '#fff7e6';
+    banner.style.borderColor = '#f0d6a3';
+    icon.innerHTML = '&#9888;';
+    document.getElementById('importCompleteMsg').textContent = 'No rows imported';
+  } else {
+    banner.style.background = 'var(--primary-soft)';
+    banner.style.borderColor = '#c6d8f0';
+    icon.innerHTML = '&#10003;';
+    document.getElementById('importCompleteMsg').textContent = `${added} position${added !== 1 ? 's' : ''} imported`;
+  }
+
   const summaryParts = [];
   if (skipped) summaryParts.push(`${skipped} row${skipped !== 1 ? 's' : ''} skipped`);
   const srcUsed = (document.getElementById('bulkDefaultSource').value || 'Internal').trim() || 'Internal';
@@ -4121,17 +4790,134 @@ function doCatalogImport(map) {
   if (errors.length) summaryParts.push(`${errors.length} issue${errors.length !== 1 ? 's' : ''}`);
   document.getElementById('importCompleteSummary').textContent = summaryParts.join('  ·  ');
   document.getElementById('nextUploadSource').value = '';
-  document.getElementById('importCompletePanel').style.display = 'block';
 
-  if (errors.length) {
-    alert(`Import done. ${errors.length} issue(s):\n` + errors.slice(0, 5).join('\n'));
-  }
+  renderImportErrors(errors);
+
+  document.getElementById('importCompletePanel').style.display = 'block';
 };
+
+const IMPORT_ERROR_CATEGORY_LABELS = {
+  'missing-required': 'Missing required fields',
+  'bad-level': 'Unrecognized level format',
+  'unknown-level': 'Level not in framework',
+  'duplicate-code': 'Duplicate job code',
+  'long-family': 'Unusually long family name',
+  'short-title': 'Very short title',
+  'numeric-title': 'Numeric-only title',
+  'level-mismatch-mgmt': 'Title/level mismatch (support-style title at Management)',
+  'level-mismatch-support': 'Title/level mismatch (management-style title at Support)',
+  'new-family': 'New job family created'
+};
+const IMPORT_SEVERITY_LABELS = { error: 'Errors', warn: 'Warnings', info: 'Info' };
+const IMPORT_ERROR_RENDER_CAP = 200;
+
+function renderImportErrors(errors) {
+  const details = document.getElementById('importErrorsDetails');
+  const list = document.getElementById('importErrorsList');
+  const summary = document.getElementById('importErrorsSummary');
+  if (!errors || !errors.length) {
+    details.style.display = 'none';
+    details.open = false;
+    list.innerHTML = '';
+    return;
+  }
+
+  details.style.display = 'block';
+  details.open = true;
+  const errCount = errors.filter(e => (e.severity || 'error') === 'error').length;
+  const warnCount = errors.filter(e => e.severity === 'warn').length;
+  const infoCount = errors.filter(e => e.severity === 'info').length;
+  const parts = [];
+  if (errCount) parts.push(`${errCount} error${errCount !== 1 ? 's' : ''}`);
+  if (warnCount) parts.push(`${warnCount} warning${warnCount !== 1 ? 's' : ''}`);
+  if (infoCount) parts.push(`${infoCount} info`);
+  summary.textContent = `Show ${parts.join(', ') || (errors.length + ' issue' + (errors.length !== 1 ? 's' : ''))}`;
+
+  // Sort: errors first, then warnings, then info — preserving row order within
+  const sevOrder = { error: 0, warn: 1, info: 2 };
+  const ordered = [...errors].sort((a, b) => (sevOrder[a.severity || 'error'] ?? 9) - (sevOrder[b.severity || 'error'] ?? 9));
+
+  // Group by category within severity order
+  const groups = new Map();
+  ordered.forEach(err => {
+    const key = (err.severity || 'error') + '::' + err.category;
+    if (!groups.has(key)) groups.set(key, { severity: err.severity || 'error', category: err.category, items: [] });
+    groups.get(key).items.push(err);
+  });
+
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const sevPill = (sev) => {
+    const colors = {
+      error: 'background:#fee2e2; color:var(--danger);',
+      warn:  'background:#fef3c7; color:var(--warn);',
+      info:  'background:#e0f2fe; color:#0369a1;'
+    };
+    const label = { error: 'Error', warn: 'Warning', info: 'Info' }[sev] || sev;
+    return `<span style="${colors[sev] || ''} padding:1px 7px; border-radius:999px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; margin-right:6px;">${label}</span>`;
+  };
+
+  let html = '';
+  let rendered = 0;
+  for (const [, grp] of groups) {
+    const label = IMPORT_ERROR_CATEGORY_LABELS[grp.category] || grp.category;
+    html += `<div style="margin-bottom:10px;">
+      <div style="font-weight:600; font-size:12px; margin-bottom:4px;">${sevPill(grp.severity)}${esc(label)} (${grp.items.length})</div>
+      <ul style="margin:0; padding-left:18px;">`;
+    for (const err of grp.items) {
+      if (rendered >= IMPORT_ERROR_RENDER_CAP) break;
+      const titlePart = err.title ? ` — <em>${esc(err.title)}</em>` : '';
+      html += `<li>Row ${err.row}${titlePart}: ${esc(err.message)}</li>`;
+      rendered++;
+    }
+    html += `</ul></div>`;
+    if (rendered >= IMPORT_ERROR_RENDER_CAP) break;
+  }
+  if (errors.length > rendered) {
+    html += `<div style="font-size:11px; color:var(--muted); margin-top:6px;">…and ${errors.length - rendered} more (use Copy errors to see all).</div>`;
+  }
+  list.innerHTML = html;
+
+  const copyBtn = document.getElementById('copyImportErrorsBtn');
+  copyBtn.onclick = () => {
+    const text = errors.map(err => {
+      const label = IMPORT_ERROR_CATEGORY_LABELS[err.category] || err.category;
+      const titlePart = err.title ? ` — ${err.title}` : '';
+      return `Row ${err.row}${titlePart}: [${label}] ${err.message}`;
+    }).join('\n');
+    const done = () => {
+      const orig = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = orig; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => { fallbackCopy(text); done(); });
+    } else {
+      fallbackCopy(text); done();
+    }
+  };
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) { /* noop */ }
+  document.body.removeChild(ta);
+}
 
 /* ---- "Start New Upload" and "Dismiss" buttons on import-complete panel ---- */
 function resetCatalogUploadZone() {
   document.getElementById('importCompletePanel').style.display = 'none';
   document.getElementById('catalogMapper').style.display = 'none';
+  const errDetails = document.getElementById('importErrorsDetails');
+  errDetails.style.display = 'none';
+  errDetails.open = false;
+  document.getElementById('importErrorsList').innerHTML = '';
   catalogParsedData = null;
   resetDropZoneContents();
   catalogFileInput.value = '';
@@ -4158,20 +4944,20 @@ function renderCareerPath() {
   const path = document.getElementById('careerPath');
   let html = '';
   for (let stage = 1; stage <= 6; stage++) {
-    const pLevels = FRAMEWORK.P.filter(l => l.stage === stage);
-    const mLevels = FRAMEWORK.M.filter(l => l.stage === stage);
-    const eLevels = stage === 6 ? FRAMEWORK.E : [];
-
     html += `<div class="stage-col">
       <div class="stage-label">Stage ${stage}</div>`;
-    [...pLevels, ...mLevels, ...eLevels].forEach(l => {
-      html += `<div class="level-box" data-level="${l.code}">
-        <div class="code">${l.code}</div>
-        <div class="title">${l.title}</div>
-      </div>`;
+    let anyForStage = false;
+    FRAMEWORK_BANDS.forEach(b => {
+      const items = (FRAMEWORK[b.key] || []).filter(l => l.stage === stage);
+      items.forEach(l => {
+        anyForStage = true;
+        html += `<div class="level-box" data-level="${l.code}">
+          <div class="code">${l.code}</div>
+          <div class="title">${escapeHtml(l.title)}</div>
+        </div>`;
+      });
     });
-    if (pLevels.length === 0) html += `<div class="level-box empty">— P —</div>`;
-    if (mLevels.length === 0) html += `<div class="level-box empty">— M —</div>`;
+    if (!anyForStage) html += `<div class="level-box empty">—</div>`;
     html += `</div>`;
   }
   path.innerHTML = html;
@@ -4243,7 +5029,7 @@ document.querySelectorAll('#view-bulk .subtab').forEach(t => {
 (function initJdOverrideSelect() {
   const sel = document.getElementById('jdResOverride');
   if (!sel) return;
-  [...FRAMEWORK.P, ...FRAMEWORK.M, ...FRAMEWORK.E].forEach(l => {
+  allLevels().forEach(l => {
     const o = document.createElement('option');
     o.value = l.code;
     o.textContent = `${l.code} – ${l.title}`;
@@ -4376,7 +5162,7 @@ function renderJdResults() {
 
   // Top summary cards
   document.getElementById('jdResLevel').textContent = useCode;
-  document.getElementById('jdResStream').textContent = useCode[0];
+  document.getElementById('jdResStream').textContent = getBand(useCode);
   const ql = matchQualityLabel(quality);
   document.getElementById('jdResMatch').textContent = ql.label;
   document.getElementById('jdResMatch').className = 'mq-value ' + ql.cls;
@@ -4457,8 +5243,8 @@ document.getElementById('jdSaveToCompanyBtn').onclick = () => {
   const normCurrent = s.current ? (normalizeLevel(s.current) || s.current.toUpperCase()) : null;
   if (normCurrent) {
     if (normCurrent === useCode) delta = 'match';
-    else if (normCurrent[0] === useCode[0]) {
-      delta = (parseInt(useCode[1]) > parseInt(normCurrent[1])) ? 'up' : 'down';
+    else if (getBand(normCurrent) === getBand(useCode)) {
+      delta = (getLevelNum(useCode) > getLevelNum(normCurrent)) ? 'up' : 'down';
     } else delta = 'cross';
   }
 
@@ -4967,8 +5753,8 @@ function generateCompareRecommendation({ titleA, titleB, currentA, currentB, eva
   const lvlA = findLevel(evalA.code);
   const lvlB = findLevel(evalB.code);
   const stageDiff = evalA.stage - evalB.stage;
-  const aBand = evalA.code[0];
-  const bBand = evalB.code[0];
+  const aBand = getBand(evalA.code);
+  const bBand = getBand(evalB.code);
   const safeA = escapeHtml(titleA);
   const safeB = escapeHtml(titleB);
 
@@ -5076,11 +5862,22 @@ updateWeightTotal = function() {
     await primeNamespaceIndexCache();
     await loadCustomCatalog();        // DB 1: Benchmark Catalog
     await loadCompanyPositions();     // DB 2: Company Positions
+    await loadFramework();            // DB 3: Custom Framework Bands/Items
+    // Re-apply band-name/color overrides for built-ins after load
+    Object.keys(FRAMEWORK_OVERRIDES).forEach(k => {
+      if (k.startsWith('__band:')) {
+        const bk = k.slice(7);
+        const ref = FRAMEWORK_BANDS.find(x => x.key === bk);
+        if (ref) Object.assign(ref, FRAMEWORK_OVERRIDES[k]);
+      }
+    });
+    populateOverrideSel();
     populateAddLevels();
     populateAddFamilies();
     renderAddedList();
     render();
-    renderFrameworkBand('P');
+    renderFrameworkSubtabs();
+    renderFrameworkBand(currentFrameworkBand);
     renderCareerPath();
     renderFamilyLadder();
     renderFactorRows();
@@ -5123,6 +5920,9 @@ if (_bc) {
     if (k === STORAGE_KEY_COMPANY) {
       await loadCompanyPositions();
       if (typeof renderCompanyPositions === 'function') renderCompanyPositions();
+    } else if (k === STORAGE_KEY_FRAMEWORK) {
+      await loadFramework();
+      renderFrameworkSubtabs(); renderFrameworkBand(currentFrameworkBand); refreshLevelDependents();
     } else if (k.startsWith('jobLevelingTool.catalog.') || k.startsWith('jobLevelingTool.families.')) {
       await loadCustomCatalog();
       renderAddedList(); render(); renderFamilyLadder();
@@ -5139,6 +5939,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     flushSaveCompanyPositions();
     flushSaveCustomCatalog();
+    flushSaveFramework();
   }
 });
 </script>
